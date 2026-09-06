@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import Topbar from "../topbar";
 import { fileToCompressedDataUrl } from "@/lib/image";
 
-type Candidate = { id: number; name: string; imageUrl?: string | null };
+type Candidate = { id: number; name: string; imageUrl?: string | null; _count?: { votes: number } };
 type CategoryWithCandidates = { id: number; name: string; candidates: Candidate[] };
 type ResultCandidate = { id: number; name: string; imageUrl?: string | null; votes: number; isWinner: boolean };
-type ResultRow = { category: string; totalVotes: number; candidates: ResultCandidate[] };
+type ResultRow = { categoryId: number; category: string; totalVotes: number; candidates: ResultCandidate[] };
 
 type Tab = "data" | "candidates" | "results";
 
@@ -19,6 +19,7 @@ export default function AdminPage() {
   const [votingOpen, setVotingOpen] = useState(false);
   const [allowlistCount, setAllowlistCount] = useState(0);
   const [voteCount, setVoteCount] = useState(0);
+  const [loginCount, setLoginCount] = useState(0);
   const [toggling, setToggling] = useState(false);
 
   // Data tab state
@@ -44,6 +45,7 @@ export default function AdminPage() {
       setVotingOpen(data.votingOpen);
       setAllowlistCount(data.allowlistCount);
       setVoteCount(data.voteCount);
+      setLoginCount(data.loginCount);
     }
   }
   async function loadResults() {
@@ -199,11 +201,17 @@ export default function AdminPage() {
     await loadCandidates();
   }
 
-  async function removeCandidate(id: number) {
+  async function removeCandidate(candidate: Candidate) {
+    const voteCount = candidate._count?.votes ?? 0;
+    const warning = voteCount > 0
+      ? `"${candidate.name}" has ${voteCount} vote${voteCount === 1 ? "" : "s"}. Deleting them will permanently remove those votes too. Continue?`
+      : `Remove "${candidate.name}"?`;
+    if (!window.confirm(warning)) return;
+
     const res = await fetch("/api/admin/candidates", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: candidate.id }),
     });
 
     const data = await res.json().catch(() => null);
@@ -217,6 +225,23 @@ export default function AdminPage() {
 
     await loadCandidates();
     await loadResults();
+    await loadStatus();
+  }
+
+  async function resetCategoryVotes(categoryId: number, categoryName: string) {
+    if (!window.confirm(`Reset all votes in "${categoryName}" back to zero? This can't be undone.`)) return;
+    const res = await fetch("/api/admin/reset-votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryId }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setUploadMsg(data?.error ?? "Could not reset votes.");
+      return;
+    }
+    await loadResults();
+    await loadStatus();
   }
 
   async function handleImageDrop(categoryId: number, file: File) {
@@ -254,12 +279,13 @@ export default function AdminPage() {
     <>
       <Topbar />
       <div className="page">
-        <div className="eyebrow">Admin</div>
+        <div className="eyebrow">Ballotrixs · Admin</div>
         <h1>Control Room</h1>
         <p className="subtitle">Manage voters, candidates, and watch results come in.</p>
 
         <div className="stat-row">
           <div className="stat"><div className="num">{allowlistCount}</div><div className="label">Eligible voters</div></div>
+          <div className="stat"><div className="num">{loginCount}</div><div className="label">Logged in</div></div>
           <div className="stat"><div className="num">{voteCount}</div><div className="label">Votes cast</div></div>
         </div>
 
@@ -351,7 +377,10 @@ export default function AdminPage() {
                         )}
                       </div>
                       <span className="candidate-name">{cand.name}</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => removeCandidate(cand.id)}>Remove</button>
+                      {(cand._count?.votes ?? 0) > 0 && (
+                        <span className="badge badge-gray" style={{ fontSize: 11 }}>{cand._count?.votes} votes</span>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={() => removeCandidate(cand)}>Remove</button>
                     </div>
                   ))}
 
@@ -444,6 +473,13 @@ export default function AdminPage() {
                     </div>
                   );
                 })}
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ marginTop: 14, color: "var(--red)" }}
+                  onClick={() => resetCategoryVotes(r.categoryId, r.category)}
+                >
+                  Reset votes for this category
+                </button>
               </div>
             ))}
           </div>

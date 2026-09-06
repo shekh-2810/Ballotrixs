@@ -7,7 +7,7 @@ export default function Topbar() {
   const { data: session } = useSession();
   return (
     <div className="topbar">
-      <Link href="/" className="brand">🗳️ VIT Bhopal <span>Poll</span></Link>
+      <Link href="/" className="brand">🗳️ <span>Ballotrixs</span></Link>
       {session?.user?.email && (
         <div className="row">
           <span className="user">{session.user.email}</span>

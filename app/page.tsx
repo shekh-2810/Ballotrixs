@@ -11,7 +11,7 @@ export default function Home() {
     <>
       <Topbar />
       <div className="page">
-        <div className="eyebrow">VIT Bhopal · Student Poll</div>
+        <div className="eyebrow">Ballotrixs · VIT Bhopal</div>
         <h1 className="hero-title">Mister &amp; Miss<br /><span className="gold">of every batch.</span></h1>
         <p className="subtitle">Vote for your favourites across the 2023–2026 batches. Takes two minutes, one Google sign-in.</p>
 

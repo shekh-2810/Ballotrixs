@@ -23,6 +23,7 @@ export async function GET() {
       .sort((a, b) => b.votes - a.votes);
     const topVotes = candidates[0]?.votes ?? 0;
     return {
+      categoryId: c.id,
       category: c.name,
       totalVotes: candidates.reduce((sum, cand) => sum + cand.votes, 0),
       candidates: candidates.map((cand) => ({

@@ -22,6 +22,14 @@ model Allowlist {
   createdAt  DateTime @default(now())
 }
 
+// One row per student who has ever successfully signed in (domain-verified).
+// Lets the admin see how many distinct students have logged in at all,
+// separate from how many are on the allowlist or have actually voted.
+model LoginLog {
+  email     String   @id
+  lastLogin DateTime @default(now())
+}
+
 // 8 rows: Mister / Miss x batch year (e.g. 2023-2026)
 model Category {
   id         Int         @id @default(autoincrement())

@@ -19,6 +19,7 @@ export async function GET() {
     include: {
       candidates: {
         orderBy: { id: "asc" },
+        include: { _count: { select: { votes: true } } },
       },
     },
     orderBy: { id: "asc" },
@@ -109,17 +110,6 @@ export async function DELETE(req: Request) {
     );
   }
 
-  const config = await prisma.pollConfig.findUnique({
-    where: { id: 1 },
-  });
-
-  if (config?.votingOpen) {
-    return NextResponse.json(
-      { error: "Candidates cannot be deleted while voting is open" },
-      { status: 409 }
-    );
-  }
-
   const candidate = await prisma.candidate.findUnique({
     where: { id },
     include: {
@@ -136,19 +126,12 @@ export async function DELETE(req: Request) {
     );
   }
 
-  if (candidate._count.votes > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This candidate has votes and cannot be deleted because deleting them would destroy voting data",
-      },
-      { status: 409 }
-    );
-  }
+  // Deleting a candidate also removes any votes cast for them - the
+  // client warns the admin about this (and shows the vote count) before
+  // calling this endpoint, since it's a real destructive action.
+  const votesRemoved = candidate._count.votes;
+  await prisma.vote.deleteMany({ where: { candidateId: id } });
+  await prisma.candidate.delete({ where: { id } });
 
-  await prisma.candidate.delete({
-    where: { id },
-  });
-
-  return NextResponse.json({ removed: id });
+  return NextResponse.json({ removed: id, votesRemoved });
 }

@@ -1,4 +1,4 @@
-# Ballotrix
+# Ballotrixs
 
 A secure student voting application for VIT Bhopal, built with Next.js, NextAuth, Prisma, and PostgreSQL.
 
@@ -195,6 +195,21 @@ Seed the initial poll configuration and categories:
 ```bash
 npm run seed
 ```
+
+### Updating from an earlier version
+
+This version adds a `LoginLog` table (tracks distinct students who have
+signed in, shown as "Logged in" on the admin dashboard) and changes how
+candidate deletion works (deleting a candidate now also removes their
+votes, with a confirmation prompt, instead of being blocked). Run:
+
+```bash
+npx prisma migrate dev --name login-log-and-candidate-delete
+```
+
+against your existing database (locally, and again with
+`prisma migrate deploy` against your production/Neon database) to pick
+up the schema change. No existing data is lost.
 
 ### Start Development Server
 

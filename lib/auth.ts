@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { prisma } from "@/lib/prisma";
 
 const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN ?? "";
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
@@ -37,6 +38,20 @@ export const authOptions: NextAuthOptions = {
         (session as any).isAdmin = ADMIN_EMAILS.includes(email);
       }
       return session;
+    },
+  },
+  events: {
+    // Fires only after signIn callback above already approved the domain,
+    // so this is always a real, verified college email. Used purely to
+    // count distinct logged-in students for the admin dashboard.
+    async signIn({ user }) {
+      const email = user.email?.toLowerCase();
+      if (!email) return;
+      await prisma.loginLog.upsert({
+        where: { email },
+        update: { lastLogin: new Date() },
+        create: { email },
+      });
     },
   },
   pages: {

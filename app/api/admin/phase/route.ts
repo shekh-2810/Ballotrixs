@@ -13,15 +13,17 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const config = await prisma.pollConfig.findUnique({ where: { id: 1 } });
-  const [allowlistCount, voteCount] = await Promise.all([
+  const [allowlistCount, voteCount, loginCount] = await Promise.all([
     prisma.allowlist.count(),
     prisma.vote.count(),
+    prisma.loginLog.count(),
   ]);
 
   return NextResponse.json({
     votingOpen: config?.votingOpen ?? false,
     allowlistCount,
     voteCount,
+    loginCount,
   });
 }
 
