@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Singleton row (id = 1) controlling whether voting is currently open.
+// Students can sign in anytime; this only gates the actual vote submission.
+model PollConfig {
+  id          Int     @id @default(1)
+  votingOpen  Boolean @default(false)
+}
+
+// Pre-uploaded by the admin (CSV/paste of known student emails) before
+// voting opens. No self-registration step - this is the source of truth
+// for who is allowed to vote.
+model Allowlist {
+  email      String   @id
+  createdAt  DateTime @default(now())
+}
+
+// 8 rows: Mister / Miss x batch year (e.g. 2023-2026)
+model Category {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  candidates Candidate[]
+  votes      Vote[]
+}
+
+model Candidate {
+  id         Int      @id @default(autoincrement())
+  name       String
+  imageUrl   String?
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id])
+  votes      Vote[]
+}
+
+model Vote {
+  id           Int      @id @default(autoincrement())
+  studentEmail String
+  categoryId   Int
+  candidateId  Int
+  createdAt    DateTime @default(now())
+
+  category  Category  @relation(fields: [categoryId], references: [id])
+  candidate Candidate @relation(fields: [candidateId], references: [id])
+
+  // The safeguard: one vote per student per category, enforced by the DB
+  // itself so it holds even under many simultaneous requests.
+  @@unique([studentEmail, categoryId])
+}
