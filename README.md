@@ -1,4 +1,4 @@
-# VIT Bhopal Student Poll
+# Ballotrix
 
 A secure student voting application for VIT Bhopal, built with Next.js, NextAuth, Prisma, and PostgreSQL.
 
