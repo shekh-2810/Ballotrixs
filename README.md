@@ -470,9 +470,7 @@ Before opening voting:
 
 After voting begins, avoid modifying candidates that already have votes.
 
-## License
 
-Private project for VIT Bhopal student polling.
 
 ## Candidate Images
 
