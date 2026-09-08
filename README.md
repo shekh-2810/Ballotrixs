@@ -487,3 +487,7 @@ or:
 
 The database stores only the resulting `/candidates/...` path. Changing an image
 requires committing and pushing the replacement file so the deployment is updated.
+
+## License
+
+Private project for HEC.
