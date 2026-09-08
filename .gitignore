@@ -27,3 +27,15 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+loadtest/tokens.json
+
+# Local load-testing files
+loadtest/tokens.json
+loadtest/vote-20k.js
+loadtest/vote-load.js
+loadtest/vote-smoke.js
+loadtest/vote-smoke-once.js
+
+# Editor temporary file
+*.swp

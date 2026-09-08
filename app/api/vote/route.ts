@@ -12,16 +12,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const config = await prisma.pollConfig.findUnique({ where: { id: 1 } });
-  if (!config?.votingOpen) {
-    return NextResponse.json({ error: "Voting is not open right now" }, { status: 403 });
-  }
-
-  const onAllowlist = await prisma.allowlist.findUnique({ where: { email } });
-  if (!onAllowlist) {
-    return NextResponse.json({ error: "You are not on the registered voters list" }, { status: 403 });
-  }
-
   const body = await req.json().catch(() => null);
   const categoryId = Number(body?.categoryId);
   const candidateId = Number(body?.candidateId);
@@ -30,7 +20,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+  // These three don't depend on each other - running them concurrently
+  // instead of one-after-another cuts the round-trip time per request by
+  // roughly 3x, which matters a lot under load: every millisecond a
+  // request holds open is a millisecond it's occupying a slot in the
+  // (limited) database connection pool.
+  const [config, onAllowlist, candidate] = await Promise.all([
+    prisma.pollConfig.findUnique({ where: { id: 1 } }),
+    prisma.allowlist.findUnique({ where: { email } }),
+    prisma.candidate.findUnique({ where: { id: candidateId } }),
+  ]);
+
+  if (!config?.votingOpen) {
+    return NextResponse.json({ error: "Voting is not open right now" }, { status: 403 });
+  }
+  if (!onAllowlist) {
+    return NextResponse.json({ error: "You are not on the registered voters list" }, { status: 403 });
+  }
   if (!candidate || candidate.categoryId !== categoryId) {
     return NextResponse.json({ error: "Candidate does not match category" }, { status: 400 });
   }
