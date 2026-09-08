@@ -8,54 +8,79 @@ async function requireAdmin() {
   return (session as any)?.isAdmin ? session : null;
 }
 
+type StudentInput = { email: string; name?: string; regNo?: string };
+
+// Returns the full list (email, name, regNo, createdAt) - at a few
+// thousand rows this is small enough to hand to the client in one shot
+// and filter/search there, no server-side search endpoint needed.
 export async function GET() {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const count = await prisma.allowlist.count();
-  return NextResponse.json({ count });
+  const students = await prisma.allowlist.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+
+  return NextResponse.json({ count: students.length, students });
 }
 
-// Body: { emails: string[] }
-// Accepts a raw list (already split client-side from a pasted/uploaded
-// CSV or .txt file - one email per line or comma-separated).
+// Body: { students: { email: string, name?: string, regNo?: string }[] }
+// Accepts either a bulk CSV-derived list or a single manually-added row -
+// both go through the same shape.
 export async function POST(req: Request) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => null);
-  const rawEmails: unknown = body?.emails;
+  const rawStudents: unknown = body?.students;
 
-  if (!Array.isArray(rawEmails)) {
-    return NextResponse.json({ error: "Expected an array of emails" }, { status: 400 });
+  if (!Array.isArray(rawStudents)) {
+    return NextResponse.json({ error: "Expected an array of students" }, { status: 400 });
   }
 
   const domain = (process.env.ALLOWED_DOMAIN ?? "").toLowerCase();
 
-  const cleaned = Array.from(
-    new Set(
-      rawEmails
-        .map((e) => String(e).trim().toLowerCase())
-        .filter((e) => e.length > 0)
-    )
-  );
+  const byEmail = new Map<string, StudentInput>();
+  for (const raw of rawStudents as StudentInput[]) {
+    const email = String(raw?.email ?? "").trim().toLowerCase();
+    if (!email) continue;
+    byEmail.set(email, {
+      email,
+      name: raw?.name ? String(raw.name).trim() : undefined,
+      regNo: raw?.regNo ? String(raw.regNo).trim() : undefined,
+    });
+  }
 
-  const validEmails = cleaned.filter((e) => e.endsWith(`@${domain}`));
-  const skipped = cleaned.length - validEmails.length;
+  const cleaned = Array.from(byEmail.values());
+  const validStudents = cleaned.filter((s) => s.email.endsWith(`@${domain}`));
+  const skipped = cleaned.length - validStudents.length;
 
-  const result = await prisma.allowlist.createMany({
-    data: validEmails.map((email) => ({ email })),
-    skipDuplicates: true,
-  });
+  // createMany can't upsert, and some rows may already exist (e.g.
+  // re-uploading a corrected sheet) - upsert one by one so a name/regNo
+  // correction on a re-upload actually takes effect instead of being
+  // silently skipped as a duplicate.
+  let added = 0;
+  let updated = 0;
+  for (const s of validStudents) {
+    const existed = await prisma.allowlist.findUnique({ where: { email: s.email } });
+    await prisma.allowlist.upsert({
+      where: { email: s.email },
+      update: { name: s.name, regNo: s.regNo },
+      create: { email: s.email, name: s.name, regNo: s.regNo },
+    });
+    if (existed) updated++;
+    else added++;
+  }
 
   return NextResponse.json({
-    added: result.count,
+    added,
+    updated,
     receivedTotal: cleaned.length,
     skippedWrongDomain: skipped,
   });
 }
 
-// Remove a single email from the allowlist (in case of a mistaken upload).
+// Remove a single email from the allowlist.
 export async function DELETE(req: Request) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

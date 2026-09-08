@@ -3,34 +3,26 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Ensure the singleton poll config row exists, starting closed.
   await prisma.pollConfig.upsert({
     where: { id: 1 },
     update: {},
     create: { id: 1, votingOpen: false },
   });
 
-  const categoryNames = [
-    "Mister 2026",
-    "Miss 2026",
-    "Mister 2025",
-    "Miss 2025",
-    "Mister 2024",
-    "Miss 2024",
-    "Mister 2023",
-    "Miss 2023",
-  ];
-
-  for (const name of categoryNames) {
-    await prisma.category.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
+  const years = [2026, 2025, 2024, 2023];
+  for (const year of years) {
+    for (const gender of ["mister", "miss"] as const) {
+      const name = `${gender === "mister" ? "Mister" : "Miss"} ${year}`;
+      await prisma.category.upsert({
+        where: { batchYear_gender: { batchYear: year, gender } },
+        update: { name },
+        create: { name, batchYear: year, gender },
+      });
+    }
   }
 
-  console.log("Seeded poll config and 8 categories.");
-  console.log("Next: add candidates to each category via Prisma Studio (npm run prisma:studio) or an admin script.");
+  console.log("Seeded poll config and 8 categories (4 batches x Mister/Miss).");
+  console.log("Add candidates via the admin panel's Candidates tab.");
 }
 
 main()

@@ -14,7 +14,7 @@ export async function GET() {
         include: { _count: { select: { votes: true } } },
       },
     },
-    orderBy: { id: "asc" },
+    orderBy: [{ batchYear: "desc" }, { gender: "asc" }],
   });
 
   const results = categories.map((c) => {
@@ -25,6 +25,8 @@ export async function GET() {
     return {
       categoryId: c.id,
       category: c.name,
+      batchYear: c.batchYear,
+      gender: c.gender,
       totalVotes: candidates.reduce((sum, cand) => sum + cand.votes, 0),
       candidates: candidates.map((cand) => ({
         ...cand,

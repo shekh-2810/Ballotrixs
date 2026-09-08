@@ -3,39 +3,45 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Singleton row (id = 1) controlling whether voting is currently open.
-// Students can sign in anytime; this only gates the actual vote submission.
 model PollConfig {
-  id          Int     @id @default(1)
-  votingOpen  Boolean @default(false)
+  id          Int       @id @default(1)
+  votingOpen  Boolean   @default(false)
+  startedAt   DateTime?
 }
 
-// Pre-uploaded by the admin (CSV/paste of known student emails) before
-// voting opens. No self-registration step - this is the source of truth
-// for who is allowed to vote.
+// Pre-uploaded by the admin before voting opens. Source of truth for who
+// is allowed to vote. name/regNo are optional metadata for search/display.
 model Allowlist {
   email      String   @id
+  name       String?
+  regNo      String?
   createdAt  DateTime @default(now())
 }
 
 // One row per student who has ever successfully signed in (domain-verified).
-// Lets the admin see how many distinct students have logged in at all,
-// separate from how many are on the allowlist or have actually voted.
 model LoginLog {
   email     String   @id
   lastLogin DateTime @default(now())
 }
 
-// 8 rows: Mister / Miss x batch year (e.g. 2023-2026)
+// A "batch" is a graduation year (2023-2026). Each batch has exactly two
+// categories: Mister and Miss. batchYear + gender let the UI group
+// categories into batches without parsing the display name.
 model Category {
   id         Int         @id @default(autoincrement())
-  name       String      @unique
+  name       String      @unique // e.g. "Mister 2026"
+  batchYear  Int                 // e.g. 2026
+  gender     String              // "mister" | "miss"
   candidates Candidate[]
   votes      Vote[]
+
+  @@unique([batchYear, gender])
 }
 
 model Candidate {
@@ -57,7 +63,6 @@ model Vote {
   category  Category  @relation(fields: [categoryId], references: [id])
   candidate Candidate @relation(fields: [candidateId], references: [id])
 
-  // The safeguard: one vote per student per category, enforced by the DB
-  // itself so it holds even under many simultaneous requests.
+  // One vote per student per category, enforced by the DB itself.
   @@unique([studentEmail, categoryId])
 }
