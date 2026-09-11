@@ -4,95 +4,123 @@ import { SharedArray } from "k6/data";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:3000";
 
-const VOTES = [
-  { categoryId: 17, candidateId: 30 },
-  { categoryId: 18, candidateId: 37 },
-];
+const tokens = new SharedArray("tokens", function () {
+  return JSON.parse(open("./tokens.json"));
+});
 
-const tokens = new SharedArray("tokens", () =>
-  JSON.parse(open("./tokens.json"))
-);
+/*
+ * Categories currently present in the database.
+ *
+ * Empty categories are intentionally skipped:
+ *   2026 Mister (17) - no candidates
+ *   2024 Mister (21) - no candidates
+ *   2023 Mister (23) - no candidates
+ *   2023 Miss   (24) - no candidates
+ */
+const VOTING_CATEGORIES = [
+  {
+    batchYear: 2026,
+    gender: "miss",
+    categoryId: 18,
+    candidates: [67, 69, 82],
+  },
+  {
+    batchYear: 2025,
+    gender: "mister",
+    categoryId: 19,
+    candidates: [72, 73, 75, 76],
+  },
+  {
+    batchYear: 2025,
+    gender: "miss",
+    categoryId: 20,
+    candidates: [70, 71],
+  },
+  {
+    batchYear: 2024,
+    gender: "miss",
+    categoryId: 22,
+    candidates: [78],
+  },
+];
 
 export const options = {
   scenarios: {
-    four_thousand_votes: {
+    voters: {
       executor: "per-vu-iterations",
-
-      // Only 50 voters active at once.
       vus: 50,
-
-      // Each VU handles 40 students.
-      // 50 × 40 = 2,000 students.
       iterations: 40,
-
-      maxDuration: "20m",
+      maxDuration: "30m",
     },
   },
 
   thresholds: {
-    checks: ["rate>0.99"],
+    http_req_failed: ["rate<0.01"],
     http_req_duration: ["p(95)<10000"],
   },
-
-  // Give requests up to 90 seconds rather than failing early.
 };
 
-function delay(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+export default function () {
+  const voterIndex = (__VU - 1) * 40 + __ITER;
 
-function vote(studentIndex, voteData) {
-  const token = tokens[studentIndex];
+  if (voterIndex >= tokens.length) {
+    return;
+  }
 
-  const res = http.post(
-    `${BASE_URL}/api/vote`,
-    JSON.stringify({
-      categoryId: voteData.categoryId,
-      candidateId: voteData.candidateId,
-    }),
-    {
+  const token = tokens[voterIndex];
+
+  console.log(
+    `Voter ${voterIndex + 1}/${
+      tokens.length
+    } | ${token.email}`
+  );
+
+  for (let i = 0; i < VOTING_CATEGORIES.length; i++) {
+    const category = VOTING_CATEGORIES[i];
+
+    // Distribute voters across candidates.
+    const candidateId =
+      category.candidates[voterIndex % category.candidates.length];
+
+    const payload = JSON.stringify({
+      categoryId: category.categoryId,
+      candidateId,
+    });
+
+    const res = http.post(`${BASE_URL}/api/vote`, payload, {
       headers: {
         "Content-Type": "application/json",
         Cookie: token.cookie,
       },
-      timeout: "90s",
       tags: {
         endpoint: "vote",
-        category: String(voteData.categoryId),
+        batch: String(category.batchYear),
+        gender: category.gender,
       },
+    });
+
+    const ok = check(res, {
+      "vote accepted": (r) => r.status === 200,
+      "not server error": (r) => r.status < 500,
+    });
+
+    if (!ok) {
+      console.error(
+        `Voter ${voterIndex + 1} | ` +
+        `${category.batchYear} ${category.gender} | ` +
+        `category=${category.categoryId} | ` +
+        `candidate=${candidateId} | ` +
+        `status=${res.status} | ` +
+        `body=${res.body}`
+      );
     }
-  );
 
-  check(res, {
-    "application response": (r) =>
-      r.status === 200 || r.status === 409,
-
-    "not 5xx": (r) => r.status < 500,
-  });
-
-  return res.status;
-}
-
-export default function () {
-  // Unique student for this VU/iteration.
-  const studentIndex = (__VU - 1) * 40 + __ITER;
-
-  if (studentIndex >= 2000) {
-    return;
+    // Human-like pause between categories.
+    if (i < VOTING_CATEGORIES.length - 1) {
+      sleep(Math.random() * 6 + 4);
+    }
   }
 
-  // Student opens the voting page / thinks before voting.
-  sleep(delay(2, 6));
-
-  // Category 1.
-  vote(studentIndex, VOTES[0]);
-
-  // Student moves to the next category.
-  sleep(delay(5, 15));
-
-  // Category 2.
-  vote(studentIndex, VOTES[1]);
-
-  // Student leaves.
-  sleep(delay(2, 5));
+  // Pause before the next voter handled by this VU.
+  sleep(Math.random() * 4 + 2);
 }
